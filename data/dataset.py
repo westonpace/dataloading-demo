@@ -6,8 +6,8 @@ import torch
 # pixel art dataset loader.
 class PixelArtDataset(Dataset):
     def __init__(self, base_path, transform=None):
-        self.images = np.load(base_path / "sprites.npy")
-        self.labels = np.load(base_path / "sprites_labels.npy")
+        self.images = np.load(f"{base_path}/sprites.npy")
+        self.labels = np.load(f"{base_path}/sprites_labels.npy")
         self.transform = transform
 
         # Data Validation (more comprehensive)
