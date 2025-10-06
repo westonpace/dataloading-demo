@@ -30,6 +30,16 @@ def main():
         default=5,
         help="Number of epochs to train",
     )
+    parser.add_argument(
+        "--profile",
+        action="store_true",
+        help="Enable PyTorch profiler",
+    )
+    parser.add_argument(
+        "--print-profile",
+        action="store_true",
+        help="Print profiler key averages table",
+    )
     args = parser.parse_args()
 
     data_path = Path(args.data_path)
@@ -98,12 +108,7 @@ def main():
     losses = []
     epoch_durations = []
 
-    with profile(
-        activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
-        record_shapes=True,
-        profile_memory=True,
-        with_stack=True,
-    ) as prof:
+    def train_loop():
         for epoch in range(n_epochs):
             epoch_start_time = time.time()
 
@@ -142,11 +147,23 @@ def main():
                 f"Finished epoch {epoch}. Average loss for this epoch: {avg_loss:05f}, Duration: {epoch_duration:.2f}s"
             )
 
-    # Analyze the results
-    print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
+    if args.profile:
+        with profile(
+            activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
+            record_shapes=True,
+            profile_memory=True,
+            with_stack=True,
+        ) as prof:
+            train_loop()
 
-    # Export for detailed analysis
-    prof.export_chrome_trace("trace.json")
+        if args.print_profile:
+            # Analyze the results
+            print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
+
+        # Export for detailed analysis
+        prof.export_chrome_trace("trace.json")
+    else:
+        train_loop()
 
     total_duration = sum(epoch_durations)
     avg_duration = total_duration / len(epoch_durations)
