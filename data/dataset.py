@@ -24,14 +24,17 @@ class PixelArtDataset(Dataset):
         label = torch.from_numpy(label).float()
 
         batch = {
-            "image": image,
-            "label": label,
+            "image": [image],
+            "label": [label],
         }
 
         if self.transform:
             batch = self.transform([batch])
 
-        return batch
+        return {
+            "image": batch["image"][0],
+            "label": batch["label"][0],
+        }
 
     def with_transform(self, transform):
         self.transform = transform
