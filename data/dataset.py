@@ -32,8 +32,8 @@ class PixelArtDataset(Dataset):
             raise ValueError("Transform is not set")
 
         transformed = self.transform(batch)
-        print(transformed)
-        return transformed
+
+        return {key: value[0] for key, value in transformed.items()}
 
     def with_transform(self, transform):
         self.transform = transform
