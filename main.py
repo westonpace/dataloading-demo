@@ -1,5 +1,6 @@
 import argparse
 from pathlib import Path
+import time
 import torch
 import torchvision
 from torch import nn
@@ -86,8 +87,11 @@ def main():
     loss_fn = nn.MSELoss()
     opt = torch.optim.Adam(net.parameters(), lr=1e-3)
     losses = []
+    epoch_durations = []
 
     for epoch in range(n_epochs):
+        epoch_start_time = time.time()
+
         for x, y in train_dataloader:
             # Get some data and prepare the corrupted version
             x = x.to(device)  # Data on the GPU
@@ -110,9 +114,16 @@ def main():
             # Store the loss for later
             losses.append(loss.item())
 
+        epoch_duration = time.time() - epoch_start_time
+        epoch_durations.append(epoch_duration)
+
         # Print our the average of the loss values for this epoch:
         avg_loss = sum(losses[-len(train_dataloader) :]) / len(train_dataloader)
-        print(f"Finished epoch {epoch}. Average loss for this epoch: {avg_loss:05f}")
+        print(f"Finished epoch {epoch}. Average loss for this epoch: {avg_loss:05f}, Duration: {epoch_duration:.2f}s")
+
+    total_duration = sum(epoch_durations)
+    avg_duration = total_duration / len(epoch_durations)
+    print(f"\nTotal duration: {total_duration:.2f}s, Average duration per epoch: {avg_duration:.2f}s")
 
 
 # pixel art dataset loader.
