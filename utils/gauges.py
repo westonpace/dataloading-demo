@@ -1,6 +1,5 @@
 import threading
 import time
-from pathlib import Path
 from typing import Optional
 from datetime import datetime
 import json
@@ -17,7 +16,6 @@ class Gauge:
 
     def __init__(self, name: str):
         self.name = name
-        self._lock = threading.Lock()
         self._total_size = 0.0
         self._total_duration = 0.0
         self._last_reset_time = time.time()
@@ -30,9 +28,8 @@ class Gauge:
             duration: Duration of the event in seconds
             size: Size in bytes processed during the event
         """
-        with self._lock:
-            self._total_size += size
-            self._total_duration += duration
+        self._total_size += size
+        self._total_duration += duration
 
     def get_speed(self) -> float:
         """
@@ -41,17 +38,15 @@ class Gauge:
         Returns:
             Speed calculated as total_size / total_duration (bytes/s)
         """
-        with self._lock:
-            if self._total_duration == 0:
-                return 0.0
-            return self._total_size / self._total_duration
+        if self._total_duration == 0:
+            return 0.0
+        return self._total_size / self._total_duration
 
     def reset(self):
         """Reset the gauge statistics."""
-        with self._lock:
-            self._total_size = 0.0
-            self._total_duration = 0.0
-            self._last_reset_time = time.time()
+        self._total_size = 0.0
+        self._total_duration = 0.0
+        self._last_reset_time = time.time()
 
     def get_stats(self) -> dict:
         """
@@ -60,13 +55,12 @@ class Gauge:
         Returns:
             Dictionary with gauge statistics (speed in bytes/s)
         """
-        with self._lock:
-            return {
-                "name": self.name,
-                "speed": self.get_speed(),
-                "total_size": self._total_size,
-                "total_duration": self._total_duration,
-            }
+        return {
+            "name": self.name,
+            "speed": self.get_speed(),
+            "total_size": self._total_size,
+            "total_duration": self._total_duration,
+        }
 
 
 class GaugeCollection:
@@ -79,7 +73,12 @@ class GaugeCollection:
     All gauges must be created before entering the context manager.
     """
 
-    def __init__(self, name: str = "gauges", interval: float = 1.0, stats_file: Optional[str] = None):
+    def __init__(
+        self,
+        name: str = "gauges",
+        interval: float = 1.0,
+        stats_file: Optional[str] = None,
+    ):
         """
         Initialize a gauge collection.
 
@@ -139,10 +138,9 @@ class GaugeCollection:
             "timestamp": timestamp,
             "elapsed": elapsed,
             "datetime": datetime.fromtimestamp(timestamp).isoformat(),
-            "gauges": {}
+            "gauges": {},
         }
 
-        # No lock needed - gauges dict is read-only after __enter__
         for name, gauge in self._gauges.items():
             stats["gauges"][name] = gauge.get_stats()
 
