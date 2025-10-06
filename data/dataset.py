@@ -52,6 +52,10 @@ class PixelArtDataset(Dataset):
 
         return image, label
 
+    def with_transform(self, transform):
+        self.transform = transform
+        return self
+
     @property
     def column_names(self):
         return ["image", "label"]
