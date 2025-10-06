@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 from collections import defaultdict
 from typing import Dict, List, Tuple
+from blessed import Terminal
 
 
 def format_bytes_per_second(bytes_per_sec: float) -> Tuple[float, str]:
@@ -64,7 +65,13 @@ def select_common_unit(max_speed: float) -> Tuple[float, str]:
 class GaugeWatcher:
     """Watches a stats file and displays gauge plots in the terminal."""
 
-    def __init__(self, stats_file: str, refresh_interval: float = 0.5, max_points: int = 50, sync_y_axis: bool = True):
+    def __init__(
+        self,
+        stats_file: str,
+        refresh_interval: float = 0.5,
+        max_points: int = 50,
+        sync_y_axis: bool = True,
+    ):
         """
         Initialize the gauge watcher.
 
@@ -81,6 +88,8 @@ class GaugeWatcher:
         self.gauge_data = defaultdict(lambda: {"times": [], "speeds": []})
         self.metadata = None
         self.last_position = 0
+        self.term = Terminal()
+        self.scroll_offset = 0  # Number of lines scrolled
 
     def read_stats(self):
         """Read new lines from the stats file."""
@@ -163,7 +172,11 @@ class GaugeWatcher:
             # Map time to x coordinate
             x = int((t - min_time) / time_range * (width - 1))
             # Map speed to y coordinate (inverted because row 0 is at top)
-            y = height - 1 - int((s - min_speed) / (max_speed - min_speed) * (height - 1))
+            y = (
+                height
+                - 1
+                - int((s - min_speed) / (max_speed - min_speed) * (height - 1))
+            )
 
             # Clamp to grid boundaries
             x = max(0, min(width - 1, x))
@@ -178,9 +191,17 @@ class GaugeWatcher:
                 t2, s2 = times[i + 1], speeds[i + 1]
 
                 x1 = int((t1 - min_time) / time_range * (width - 1))
-                y1 = height - 1 - int((s1 - min_speed) / (max_speed - min_speed) * (height - 1))
+                y1 = (
+                    height
+                    - 1
+                    - int((s1 - min_speed) / (max_speed - min_speed) * (height - 1))
+                )
                 x2 = int((t2 - min_time) / time_range * (width - 1))
-                y2 = height - 1 - int((s2 - min_speed) / (max_speed - min_speed) * (height - 1))
+                y2 = (
+                    height
+                    - 1
+                    - int((s2 - min_speed) / (max_speed - min_speed) * (height - 1))
+                )
 
                 # Clamp coordinates
                 x1 = max(0, min(width - 1, x1))
@@ -216,13 +237,13 @@ class GaugeWatcher:
         """Render the complete display with all gauges."""
         output = []
 
-        # Clear screen
-        output.append("\033[2J\033[H")
-
         # Header
         if self.metadata:
             output.append(f"Gauge Collection: {self.metadata['collection_name']}")
             output.append(f"Interval: {self.metadata['interval']}s")
+            output.append(
+                f"Scroll: {self.scroll_offset} lines (↑/↓ arrows, PgUp/PgDn, 'q' to quit)"
+            )
             output.append("")
 
         if not self.gauge_data:
@@ -279,7 +300,9 @@ class GaugeWatcher:
             latest_value = display_speeds[-1] if display_speeds else 0.0
 
             # Render plot with display speeds
-            plot_lines, _ = self.render_plot_with_max(times, display_speeds, max_display_speed)
+            plot_lines, _ = self.render_plot_with_max(
+                times, display_speeds, max_display_speed
+            )
 
             # Add gauge header
             output.append(f"=== {gauge_name} ===")
@@ -304,14 +327,37 @@ class GaugeWatcher:
             # Add x-axis
             x_axis_label = " " * (7 + len(gauge_units) + 2) + "└" + "─" * 60
             output.append(x_axis_label)
-            time_label = " " * (7 + len(gauge_units) + 3) + f"{min_time:.1f}s" + " " * 40 + f"{max_time:.1f}s"
+            time_label = (
+                " " * (7 + len(gauge_units) + 3)
+                + f"{min_time:.1f}s"
+                + " " * 40
+                + f"{max_time:.1f}s"
+            )
             output.append(time_label)
             output.append("")
 
-        return "\n".join(output)
+        # Apply scroll offset
+        all_lines = output
+        if self.scroll_offset > 0:
+            # Scroll down (skip lines from the top)
+            visible_lines = all_lines[self.scroll_offset :]
+        else:
+            # Scroll up (pad with empty lines at top)
+            visible_lines = [""] * abs(self.scroll_offset) + all_lines
+
+        # Limit to terminal height
+        if self.term.height:
+            visible_lines = visible_lines[: self.term.height]
+
+        return "\n".join(visible_lines)
 
     def render_plot_with_max(
-        self, times: List[float], speeds: List[float], max_speed: float, height: int = 10, width: int = 60
+        self,
+        times: List[float],
+        speeds: List[float],
+        max_speed: float,
+        height: int = 10,
+        width: int = 60,
     ) -> Tuple[List[str], float]:
         """
         Render an ASCII plot with a specified max speed.
@@ -347,7 +393,11 @@ class GaugeWatcher:
             # Map time to x coordinate
             x = int((t - min_time) / time_range * (width - 1))
             # Map speed to y coordinate (inverted because row 0 is at top)
-            y = height - 1 - int((s - min_speed) / (max_speed - min_speed) * (height - 1))
+            y = (
+                height
+                - 1
+                - int((s - min_speed) / (max_speed - min_speed) * (height - 1))
+            )
 
             # Clamp to grid boundaries
             x = max(0, min(width - 1, x))
@@ -362,9 +412,17 @@ class GaugeWatcher:
                 t2, s2 = times[i + 1], speeds[i + 1]
 
                 x1 = int((t1 - min_time) / time_range * (width - 1))
-                y1 = height - 1 - int((s1 - min_speed) / (max_speed - min_speed) * (height - 1))
+                y1 = (
+                    height
+                    - 1
+                    - int((s1 - min_speed) / (max_speed - min_speed) * (height - 1))
+                )
                 x2 = int((t2 - min_time) / time_range * (width - 1))
-                y2 = height - 1 - int((s2 - min_speed) / (max_speed - min_speed) * (height - 1))
+                y2 = (
+                    height
+                    - 1
+                    - int((s2 - min_speed) / (max_speed - min_speed) * (height - 1))
+                )
 
                 # Clamp coordinates
                 x1 = max(0, min(width - 1, x1))
@@ -398,15 +456,42 @@ class GaugeWatcher:
 
     def watch(self):
         """Main watch loop."""
-        try:
-            while True:
-                self.read_stats()
-                display = self.render_display()
-                print(display, end="", flush=True)
-                time.sleep(self.refresh_interval)
-        except KeyboardInterrupt:
-            print("\n\nStopped watching.")
-            sys.exit(0)
+        with self.term.fullscreen(), self.term.hidden_cursor(), self.term.cbreak():
+            try:
+                last_update = time.time()
+
+                while True:
+                    # Check for input (non-blocking)
+                    key = self.term.inkey(timeout=0.01)
+
+                    if key:
+                        if key.lower() == "q":
+                            break
+                        # Handle arrow keys
+                        elif key.code == self.term.KEY_UP:
+                            self.scroll_offset = max(0, self.scroll_offset - 3)
+                        elif key.code == self.term.KEY_DOWN:
+                            self.scroll_offset += 3
+                        elif key.code == self.term.KEY_PGUP:
+                            self.scroll_offset = max(0, self.scroll_offset - 10)
+                        elif key.code == self.term.KEY_PGDOWN:
+                            self.scroll_offset += 10
+
+                    # Update display periodically
+                    current_time = time.time()
+                    if current_time - last_update >= self.refresh_interval:
+                        self.read_stats()
+                        display = self.render_display()
+                        print(
+                            self.term.home + self.term.clear + display, end="", flush=True
+                        )
+                        last_update = current_time
+
+            except KeyboardInterrupt:
+                pass
+
+        print("\nStopped watching.")
+        sys.exit(0)
 
 
 def main():
