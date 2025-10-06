@@ -51,3 +51,10 @@ class PixelArtDataset(Dataset):
         label = torch.from_numpy(label).float()
 
         return image, label
+
+    def column_names(self):
+        return ["image", "label"]
+
+
+def load_dataset(base_path):
+    return {"train": PixelArtDataset(base_path)}
