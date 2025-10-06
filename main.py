@@ -79,9 +79,9 @@ def main():
     )
     net.to(device)
 
-    n_epochs = 100
+    n_epochs = 5
     batch_size = 512
-    train_dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+    train_dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=2)
 
     loss_fn = nn.MSELoss()
     opt = torch.optim.Adam(net.parameters(), lr=1e-3)
