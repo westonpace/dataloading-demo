@@ -3,6 +3,7 @@ from pathlib import Path
 import time
 import torch
 import torchvision
+from torch.profiler import profile, ProfilerActivity
 from torch import nn
 from torch.nn import functional as F
 from torch.utils.data import DataLoader
@@ -88,48 +89,70 @@ def main():
 
     n_epochs = args.num_epochs
     batch_size = 512
-    train_dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=2)
+    train_dataloader = DataLoader(
+        dataset, batch_size=batch_size, shuffle=True, num_workers=2
+    )
 
     loss_fn = nn.MSELoss()
     opt = torch.optim.Adam(net.parameters(), lr=1e-3)
     losses = []
     epoch_durations = []
 
-    for epoch in range(n_epochs):
-        epoch_start_time = time.time()
+    with profile(
+        activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
+        record_shapes=True,
+        profile_memory=True,
+        with_stack=True,
+    ) as prof:
+        for epoch in range(n_epochs):
+            epoch_start_time = time.time()
 
-        for x, y in train_dataloader:
-            # Get some data and prepare the corrupted version
-            x = x.to(device)  # Data on the GPU
-            noise_amount = torch.rand(x.shape[0]).to(
-                device
-            )  # Pick random noise amounts
-            noisy_x = corrupt(x, noise_amount)  # Create our noisy x
+            for x, y in train_dataloader:
+                # Get some data and prepare the corrupted version
+                x = x.to(device)  # Data on the GPU
+                noise_amount = torch.rand(x.shape[0]).to(
+                    device
+                )  # Pick random noise amounts
+                noisy_x = corrupt(x, noise_amount)  # Create our noisy x
 
-            # Get the model prediction
-            pred = net(noisy_x, 0).sample  # <<< Using timestep 0 always, adding .sample
+                # Get the model prediction
+                pred = net(
+                    noisy_x, 0
+                ).sample  # <<< Using timestep 0 always, adding .sample
 
-            # Calculate the loss
-            loss = loss_fn(pred, x)  # How close is the output to the true 'clean' x?
+                # Calculate the loss
+                loss = loss_fn(
+                    pred, x
+                )  # How close is the output to the true 'clean' x?
 
-            # Backprop and update the params:
-            opt.zero_grad()
-            loss.backward()
-            opt.step()
+                # Backprop and update the params:
+                opt.zero_grad()
+                loss.backward()
+                opt.step()
 
-            # Store the loss for later
-            losses.append(loss.item())
+                # Store the loss for later
+                losses.append(loss.item())
 
-        epoch_duration = time.time() - epoch_start_time
-        epoch_durations.append(epoch_duration)
+            epoch_duration = time.time() - epoch_start_time
+            epoch_durations.append(epoch_duration)
 
-        # Print our the average of the loss values for this epoch:
-        avg_loss = sum(losses[-len(train_dataloader) :]) / len(train_dataloader)
-        print(f"Finished epoch {epoch}. Average loss for this epoch: {avg_loss:05f}, Duration: {epoch_duration:.2f}s")
+            # Print our the average of the loss values for this epoch:
+            avg_loss = sum(losses[-len(train_dataloader) :]) / len(train_dataloader)
+            print(
+                f"Finished epoch {epoch}. Average loss for this epoch: {avg_loss:05f}, Duration: {epoch_duration:.2f}s"
+            )
+
+    # Analyze the results
+    print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
+
+    # Export for detailed analysis
+    prof.export_chrome_trace("trace.json")
 
     total_duration = sum(epoch_durations)
     avg_duration = total_duration / len(epoch_durations)
-    print(f"\nTotal duration: {total_duration:.2f}s, Average duration per epoch: {avg_duration:.2f}s")
+    print(
+        f"\nTotal duration: {total_duration:.2f}s, Average duration per epoch: {avg_duration:.2f}s"
+    )
 
 
 # pixel art dataset loader.
