@@ -808,7 +808,7 @@ def main():
     data_files = {}
     if args.train_data_dir is not None:
         data_files["train"] = os.path.join(args.train_data_dir, "**")
-    dataset = load_dataset(args.train_data_dir, gauge_collection=gauge_collection)
+    dataset = load_dataset(args.train_data_dir)
 
     # Preprocessing the datasets.
     # We need to tokenize inputs and targets.
@@ -1052,6 +1052,8 @@ def main():
 
     # Create gauges for training loop operations
     with gauge_collection:
+        image_load_gauge = gauge_collection.create_gauge("image_load")
+        preprocess_gauge = gauge_collection.create_gauge("preprocess")
         vae_encode_gauge = gauge_collection.create_gauge("vae_encode")
         text_encode_gauge = gauge_collection.create_gauge("text_encode")
         unet_forward_gauge = gauge_collection.create_gauge("unet_forward")
@@ -1062,6 +1064,20 @@ def main():
             train_loss = 0.0
             for step, batch in enumerate(train_dataloader):
                 import time
+
+                # Extract timing information from batch and record in gauges
+                if "_timing_image_load" in batch:
+                    # Aggregate timing across batch
+                    for i in range(len(batch["_timing_image_load"])):
+                        image_load_gauge.record_event(
+                            batch["_timing_image_load"][i].item(),
+                            batch["_timing_image_size"][i].item()
+                        )
+                        preprocess_gauge.record_event(
+                            batch["_timing_preprocess"][i].item(),
+                            batch["_timing_image_size"][i].item()
+                        )
+
                 with accelerator.accumulate(unet):
                     # Convert images to latent space
                     start_time = time.time()
