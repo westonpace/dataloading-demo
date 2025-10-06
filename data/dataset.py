@@ -21,15 +21,17 @@ class PixelArtDataset(Dataset):
         img_path = f"{self.base_path}/images/images/image_{idx}.JPEG"
         image = Image.open(img_path)
 
-        if self.transform:
-            image = self.transform(image)
-
         label = torch.from_numpy(label).float()
 
-        return {
+        batch = {
             "image": image,
             "label": label,
         }
+
+        if self.transform:
+            batch = self.transform([batch])
+
+        return batch
 
     def with_transform(self, transform):
         self.transform = transform
