@@ -1,0 +1,12 @@
+[project]
+name = "dataloader-demo"
+version = "0.1.0"
+description = "Demo showing various data loading examples"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "diffusers>=0.35.1",
+    "matplotlib>=3.10.6",
+    "torch>=2.8.0",
+    "torchvision>=0.23.0",
+]
