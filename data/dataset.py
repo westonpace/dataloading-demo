@@ -21,7 +21,7 @@ class PixelArtDataset(Dataset):
         img_path = f"{self.base_path}/images/images/image_{idx}.JPEG"
         image = Image.open(img_path)
 
-        label = torch.from_numpy(label).float()
+        label = "".join(torch.from_numpy(label).float())
 
         batch = {
             "image": [image],
