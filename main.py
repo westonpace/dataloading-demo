@@ -47,12 +47,9 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    images_path = data_path / "sprites.npy"
-    labels_path = data_path / "sprites_labels.npy"
-
     transform = transforms.Compose([])
 
-    dataset = PixelArtDataset(images_path, labels_path, transform=transform)
+    dataset = PixelArtDataset(data_path, transform=transform)
 
     # Create a DataLoader for batching and shuffling
     dataloader = DataLoader(
