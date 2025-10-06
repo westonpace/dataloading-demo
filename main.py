@@ -23,6 +23,12 @@ def main():
         default="/home/pace/dev/data/pixel-art",
         help="Base path to the data directory",
     )
+    parser.add_argument(
+        "--num-epochs",
+        type=int,
+        default=5,
+        help="Number of epochs to train",
+    )
     args = parser.parse_args()
 
     data_path = Path(args.data_path)
@@ -80,7 +86,7 @@ def main():
     )
     net.to(device)
 
-    n_epochs = 5
+    n_epochs = args.num_epochs
     batch_size = 512
     train_dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=2)
 
