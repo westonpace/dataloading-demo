@@ -28,13 +28,10 @@ class PixelArtDataset(Dataset):
             "label": [label],
         }
 
-        if self.transform:
-            batch = self.transform(batch)
+        if self.transform is None:
+            raise ValueError("Transform is not set")
 
-        return {
-            "image": batch["image"][0],
-            "label": batch["label"][0],
-        }
+        return self.transform(batch)
 
     def with_transform(self, transform):
         self.transform = transform
