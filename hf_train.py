@@ -61,6 +61,7 @@ from diffusers.utils.import_utils import is_xformers_available
 from diffusers.utils.torch_utils import is_compiled_module
 
 from data.dataset import load_dataset
+from utils.gauges import GaugeCollection
 
 logger = get_logger(__name__, log_level="INFO")
 
@@ -570,6 +571,9 @@ def parse_args():
 def main():
     args = parse_args()
 
+    # Create gauge collection for performance monitoring
+    gauge_collection = GaugeCollection(name="training", interval=1.0)
+
     if args.report_to == "wandb" and args.hub_token is not None:
         raise ValueError(
             "You cannot use both --report_to=wandb and --hub_token due to a security risk of exposing your token."
@@ -804,7 +808,7 @@ def main():
     data_files = {}
     if args.train_data_dir is not None:
         data_files["train"] = os.path.join(args.train_data_dir, "**")
-    dataset = load_dataset(args.train_data_dir)
+    dataset = load_dataset(args.train_data_dir, gauge_collection=gauge_collection)
 
     # Preprocessing the datasets.
     # We need to tokenize inputs and targets.
@@ -1046,15 +1050,29 @@ def main():
         disable=not accelerator.is_local_main_process,
     )
 
-    for epoch in range(first_epoch, args.num_train_epochs):
-        train_loss = 0.0
-        for step, batch in enumerate(train_dataloader):
-            with accelerator.accumulate(unet):
-                # Convert images to latent space
-                latents = vae.encode(
-                    batch["pixel_values"].to(weight_dtype)
-                ).latent_dist.sample()
-                latents = latents * vae.config.scaling_factor
+    # Create gauges for training loop operations
+    with gauge_collection:
+        vae_encode_gauge = gauge_collection.create_gauge("vae_encode")
+        text_encode_gauge = gauge_collection.create_gauge("text_encode")
+        unet_forward_gauge = gauge_collection.create_gauge("unet_forward")
+        loss_backward_gauge = gauge_collection.create_gauge("loss_backward")
+        optimizer_step_gauge = gauge_collection.create_gauge("optimizer_step")
+
+        for epoch in range(first_epoch, args.num_train_epochs):
+            train_loss = 0.0
+            for step, batch in enumerate(train_dataloader):
+                import time
+                with accelerator.accumulate(unet):
+                    # Convert images to latent space
+                    start_time = time.time()
+                    latents = vae.encode(
+                        batch["pixel_values"].to(weight_dtype)
+                    ).latent_dist.sample()
+                    latents = latents * vae.config.scaling_factor
+                    vae_duration = time.time() - start_time
+                    # Estimate size: batch_size * latent dimensions * 4 bytes (float32)
+                    vae_size = latents.numel() * 4
+                    vae_encode_gauge.record_event(vae_duration, vae_size)
 
                 # Sample noise that we'll add to the latents
                 noise = torch.randn_like(latents)
@@ -1088,9 +1106,13 @@ def main():
                     noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps)
 
                 # Get the text embedding for conditioning
+                start_time = time.time()
                 encoder_hidden_states = text_encoder(
                     batch["input_ids"], return_dict=False
                 )[0]
+                text_duration = time.time() - start_time
+                text_size = encoder_hidden_states.numel() * 4
+                text_encode_gauge.record_event(text_duration, text_size)
 
                 # Get the target for loss depending on the prediction type
                 if args.prediction_type is not None:
@@ -1121,9 +1143,13 @@ def main():
                     )
 
                 # Predict the noise residual and compute loss
+                start_time = time.time()
                 model_pred = unet(
                     noisy_latents, timesteps, encoder_hidden_states, return_dict=False
                 )[0]
+                unet_duration = time.time() - start_time
+                unet_size = model_pred.numel() * 4
+                unet_forward_gauge.record_event(unet_duration, unet_size)
 
                 if args.snr_gamma is None:
                     loss = F.mse_loss(
@@ -1156,12 +1182,22 @@ def main():
                 train_loss += avg_loss.item() / args.gradient_accumulation_steps
 
                 # Backpropagate
+                start_time = time.time()
                 accelerator.backward(loss)
+                backward_duration = time.time() - start_time
+                # Use model size as estimate
+                backward_size = sum(p.numel() for p in unet.parameters()) * 4
+                loss_backward_gauge.record_event(backward_duration, backward_size)
+
                 if accelerator.sync_gradients:
                     accelerator.clip_grad_norm_(unet.parameters(), args.max_grad_norm)
+
+                start_time = time.time()
                 optimizer.step()
                 lr_scheduler.step()
                 optimizer.zero_grad()
+                optimizer_duration = time.time() - start_time
+                optimizer_step_gauge.record_event(optimizer_duration, backward_size)
 
             # Checks if the accelerator has performed an optimization step behind the scenes
             if accelerator.sync_gradients:
@@ -1245,6 +1281,8 @@ def main():
                 if args.use_ema:
                     # Switch back to the original UNet parameters.
                     ema_unet.restore(unet.parameters())
+
+        # Gauge collection context ends here (training loop complete)
 
     # Create the pipeline using the trained modules and save it.
     accelerator.wait_for_everyone()
