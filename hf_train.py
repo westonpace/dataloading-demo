@@ -1050,16 +1050,16 @@ def main():
         disable=not accelerator.is_local_main_process,
     )
 
-    # Create gauges for training loop operations
-    with gauge_collection:
-        image_load_gauge = gauge_collection.create_gauge("image_load")
-        preprocess_gauge = gauge_collection.create_gauge("preprocess")
-        vae_encode_gauge = gauge_collection.create_gauge("vae_encode")
-        text_encode_gauge = gauge_collection.create_gauge("text_encode")
-        unet_forward_gauge = gauge_collection.create_gauge("unet_forward")
-        loss_backward_gauge = gauge_collection.create_gauge("loss_backward")
-        optimizer_step_gauge = gauge_collection.create_gauge("optimizer_step")
+    # Create gauges for training loop operations (must be created before entering context)
+    image_load_gauge = gauge_collection.create_gauge("image_load")
+    preprocess_gauge = gauge_collection.create_gauge("preprocess")
+    vae_encode_gauge = gauge_collection.create_gauge("vae_encode")
+    text_encode_gauge = gauge_collection.create_gauge("text_encode")
+    unet_forward_gauge = gauge_collection.create_gauge("unet_forward")
+    loss_backward_gauge = gauge_collection.create_gauge("loss_backward")
+    optimizer_step_gauge = gauge_collection.create_gauge("optimizer_step")
 
+    with gauge_collection:
         for epoch in range(first_epoch, args.num_train_epochs):
             train_loss = 0.0
             for step, batch in enumerate(train_dataloader):

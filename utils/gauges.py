@@ -75,6 +75,8 @@ class GaugeCollection:
 
     The collection runs a background thread that periodically writes
     gauge statistics to a file in /tmp.
+
+    All gauges must be created before entering the context manager.
     """
 
     def __init__(self, name: str = "gauges", interval: float = 1.0, stats_file: Optional[str] = None):
@@ -90,15 +92,17 @@ class GaugeCollection:
         self.interval = interval
         self._stats_file_path = stats_file or "/tmp/stats.jsonl"
         self._gauges = {}
-        self._lock = threading.Lock()
         self._thread = None
         self._stop_event = threading.Event()
         self._stats_file = None
         self._start_time = None
+        self._started = False
 
     def create_gauge(self, name: str) -> Gauge:
         """
         Create a new gauge in the collection.
+
+        Must be called before entering the context manager.
 
         Args:
             name: Name of the gauge
@@ -106,12 +110,13 @@ class GaugeCollection:
         Returns:
             The created Gauge instance
         """
-        with self._lock:
-            if name in self._gauges:
-                raise ValueError(f"Gauge '{name}' already exists")
-            gauge = Gauge(name)
-            self._gauges[name] = gauge
-            return gauge
+        if self._started:
+            raise RuntimeError("Cannot create gauges after collection has been started")
+        if name in self._gauges:
+            raise ValueError(f"Gauge '{name}' already exists")
+        gauge = Gauge(name)
+        self._gauges[name] = gauge
+        return gauge
 
     def get_gauge(self, name: str) -> Optional[Gauge]:
         """
@@ -123,8 +128,7 @@ class GaugeCollection:
         Returns:
             The Gauge instance or None if not found
         """
-        with self._lock:
-            return self._gauges.get(name)
+        return self._gauges.get(name)
 
     def _write_stats(self):
         """Write current stats to the stats file."""
@@ -138,9 +142,9 @@ class GaugeCollection:
             "gauges": {}
         }
 
-        with self._lock:
-            for name, gauge in self._gauges.items():
-                stats["gauges"][name] = gauge.get_stats()
+        # No lock needed - gauges dict is read-only after __enter__
+        for name, gauge in self._gauges.items():
+            stats["gauges"][name] = gauge.get_stats()
 
         # Append to stats file
         with open(self._stats_file, "a") as f:
@@ -153,6 +157,7 @@ class GaugeCollection:
 
     def __enter__(self):
         """Enter context manager - start background thread and create stats file."""
+        self._started = True
         self._start_time = time.time()
         self._stats_file = self._stats_file_path
 
