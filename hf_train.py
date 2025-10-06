@@ -53,16 +53,12 @@ from diffusers.training_utils import (
     compute_snr,
 )
 from diffusers.utils import (
-    check_min_version,
     deprecate,
     make_image_grid,
 )
 from diffusers.utils.hub_utils import load_or_create_model_card, populate_model_card
 from diffusers.utils.import_utils import is_xformers_available
 from diffusers.utils.torch_utils import is_compiled_module
-
-# Will error if the minimal version of diffusers is not installed. Remove at your own risks.
-check_min_version("0.36.0.dev0")
 
 logger = get_logger(__name__, log_level="INFO")
 
