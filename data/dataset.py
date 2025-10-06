@@ -9,7 +9,7 @@ class PixelArtDataset(Dataset):
     def __init__(self, base_path, transform=None):
         self.labels = np.load(f"{base_path}/sprites_labels.npy")
         self.base_path = base_path
-        self.num_images = self.images.shape[0]
+        self.num_images = self.labels.shape[0]
         self.transform = transform
 
     def __len__(self):
