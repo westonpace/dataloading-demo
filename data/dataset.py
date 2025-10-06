@@ -18,7 +18,7 @@ class PixelArtDataset(Dataset):
     def __getitem__(self, idx):
         label = self.labels[idx]
 
-        img_path = f"{self.base_path}/images/images/image_{idx}.png"
+        img_path = f"{self.base_path}/images/images/image_{idx}.JPEG"
         image = Image.open(img_path)
 
         if self.transform:
