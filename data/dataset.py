@@ -31,7 +31,9 @@ class PixelArtDataset(Dataset):
         if self.transform is None:
             raise ValueError("Transform is not set")
 
-        return self.transform(batch)
+        transformed = self.transform(batch)
+        print(transformed)
+        return transformed
 
     def with_transform(self, transform):
         self.transform = transform
