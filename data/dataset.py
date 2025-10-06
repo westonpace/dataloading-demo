@@ -29,7 +29,7 @@ class PixelArtDataset(Dataset):
         }
 
         if self.transform:
-            batch = self.transform([batch])
+            batch = self.transform(batch)
 
         return {
             "image": batch["image"][0],
