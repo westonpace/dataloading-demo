@@ -7,8 +7,8 @@ import json
 
 class Gauge:
     """
-    A gauge that tracks events with duration and size to compute throughput.
-    All measurements are in bytes per second.
+    A gauge that tracks events with duration and number of rows to compute throughput.
+    All measurements are in rows per second.
 
     Attributes:
         name: Name of the gauge
@@ -16,35 +16,35 @@ class Gauge:
 
     def __init__(self, name: str):
         self.name = name
-        self._total_size = 0.0
+        self._total_rows = 0.0
         self._total_duration = 0.0
         self._last_reset_time = time.time()
 
-    def record_event(self, duration: float, size: float):
+    def record_event(self, duration: float, num_rows: float):
         """
-        Record an event with its duration and size.
+        Record an event with its duration and number of rows.
 
         Args:
             duration: Duration of the event in seconds
-            size: Size in bytes processed during the event
+            num_rows: Number of rows processed during the event
         """
-        self._total_size += size
+        self._total_rows += num_rows
         self._total_duration += duration
 
     def get_speed(self) -> float:
         """
-        Get the current speed in bytes per second.
+        Get the current speed in rows per second.
 
         Returns:
-            Speed calculated as total_size / total_duration (bytes/s)
+            Speed calculated as total_rows / total_duration (rows/s)
         """
         if self._total_duration == 0:
             return 0.0
-        return self._total_size / self._total_duration
+        return self._total_rows / self._total_duration
 
     def reset(self):
         """Reset the gauge statistics."""
-        self._total_size = 0.0
+        self._total_rows = 0.0
         self._total_duration = 0.0
         self._last_reset_time = time.time()
 
@@ -53,12 +53,12 @@ class Gauge:
         Get current statistics.
 
         Returns:
-            Dictionary with gauge statistics (speed in bytes/s)
+            Dictionary with gauge statistics (speed in rows/s)
         """
         return {
             "name": self.name,
             "speed": self.get_speed(),
-            "total_size": self._total_size,
+            "total_rows": self._total_rows,
             "total_duration": self._total_duration,
         }
 

@@ -908,7 +908,16 @@ def main():
         pixel_values = torch.stack([example["pixel_values"] for example in examples])
         pixel_values = pixel_values.to(memory_format=torch.contiguous_format).float()
         input_ids = torch.stack([example["input_ids"] for example in examples])
-        return {"pixel_values": pixel_values, "input_ids": input_ids}
+
+        batch = {"pixel_values": pixel_values, "input_ids": input_ids}
+
+        # Forward timing fields if they exist
+        if "_timing_image_load" in examples[0]:
+            batch["_timing_image_load"] = torch.tensor([ex["_timing_image_load"] for ex in examples])
+            batch["_timing_image_size"] = torch.tensor([ex["_timing_image_size"] for ex in examples])
+            batch["_timing_preprocess"] = torch.tensor([ex["_timing_preprocess"] for ex in examples])
+
+        return batch
 
     # DataLoaders creation:
     train_dataloader = torch.utils.data.DataLoader(
@@ -1067,16 +1076,13 @@ def main():
 
                 # Extract timing information from batch and record in gauges
                 if "_timing_image_load" in batch:
-                    # Aggregate timing across batch
-                    for i in range(len(batch["_timing_image_load"])):
-                        image_load_gauge.record_event(
-                            batch["_timing_image_load"][i].item(),
-                            batch["_timing_image_size"][i].item()
-                        )
-                        preprocess_gauge.record_event(
-                            batch["_timing_preprocess"][i].item(),
-                            batch["_timing_image_size"][i].item()
-                        )
+                    # Sum timing across batch and record once
+                    total_image_load_time = batch["_timing_image_load"].sum().item()
+                    total_preprocess_time = batch["_timing_preprocess"].sum().item()
+                    batch_size = len(batch["_timing_image_load"])
+
+                    image_load_gauge.record_event(total_image_load_time, batch_size)
+                    preprocess_gauge.record_event(total_preprocess_time, batch_size)
 
                 with accelerator.accumulate(unet):
                     # Convert images to latent space
@@ -1086,9 +1092,9 @@ def main():
                     ).latent_dist.sample()
                     latents = latents * vae.config.scaling_factor
                     vae_duration = time.time() - start_time
-                    # Estimate size: batch_size * latent dimensions * 4 bytes (float32)
-                    vae_size = latents.numel() * 4
-                    vae_encode_gauge.record_event(vae_duration, vae_size)
+                    # Number of rows is batch size
+                    num_rows = latents.shape[0]
+                    vae_encode_gauge.record_event(vae_duration, num_rows)
 
                 # Sample noise that we'll add to the latents
                 noise = torch.randn_like(latents)
@@ -1127,8 +1133,9 @@ def main():
                     batch["input_ids"], return_dict=False
                 )[0]
                 text_duration = time.time() - start_time
-                text_size = encoder_hidden_states.numel() * 4
-                text_encode_gauge.record_event(text_duration, text_size)
+                # Number of rows is batch size
+                num_rows = encoder_hidden_states.shape[0]
+                text_encode_gauge.record_event(text_duration, num_rows)
 
                 # Get the target for loss depending on the prediction type
                 if args.prediction_type is not None:
@@ -1164,8 +1171,9 @@ def main():
                     noisy_latents, timesteps, encoder_hidden_states, return_dict=False
                 )[0]
                 unet_duration = time.time() - start_time
-                unet_size = model_pred.numel() * 4
-                unet_forward_gauge.record_event(unet_duration, unet_size)
+                # Number of rows is batch size
+                num_rows = model_pred.shape[0]
+                unet_forward_gauge.record_event(unet_duration, num_rows)
 
                 if args.snr_gamma is None:
                     loss = F.mse_loss(
@@ -1201,9 +1209,9 @@ def main():
                 start_time = time.time()
                 accelerator.backward(loss)
                 backward_duration = time.time() - start_time
-                # Use model size as estimate
-                backward_size = sum(p.numel() for p in unet.parameters()) * 4
-                loss_backward_gauge.record_event(backward_duration, backward_size)
+                # Number of rows is batch size
+                num_rows = args.train_batch_size
+                loss_backward_gauge.record_event(backward_duration, num_rows)
 
                 if accelerator.sync_gradients:
                     accelerator.clip_grad_norm_(unet.parameters(), args.max_grad_norm)
@@ -1213,7 +1221,7 @@ def main():
                 lr_scheduler.step()
                 optimizer.zero_grad()
                 optimizer_duration = time.time() - start_time
-                optimizer_step_gauge.record_event(optimizer_duration, backward_size)
+                optimizer_step_gauge.record_event(optimizer_duration, num_rows)
 
             # Checks if the accelerator has performed an optimization step behind the scenes
             if accelerator.sync_gradients:

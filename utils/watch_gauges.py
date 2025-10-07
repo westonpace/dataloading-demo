@@ -13,30 +13,30 @@ from typing import Dict, List, Tuple
 from blessed import Terminal
 
 
-def format_bytes_per_second(bytes_per_sec: float) -> Tuple[float, str]:
+def format_rows_per_second(rows_per_sec: float) -> Tuple[float, str]:
     """
-    Convert bytes per second to appropriate units.
+    Convert rows per second to appropriate units.
 
     Args:
-        bytes_per_sec: Speed in bytes per second
+        rows_per_sec: Speed in rows per second
 
     Returns:
         Tuple of (converted value, unit string)
     """
-    # Define units (using powers of 1024 for binary units)
+    # Define units (using powers of 1000 for metric units)
     units = [
-        (1024**4, "TiB/s"),
-        (1024**3, "GiB/s"),
-        (1024**2, "MiB/s"),
-        (1024**1, "KiB/s"),
-        (1, "B/s"),
+        (1000**4, "T rows/s"),
+        (1000**3, "G rows/s"),
+        (1000**2, "M rows/s"),
+        (1000**1, "K rows/s"),
+        (1, "rows/s"),
     ]
 
     for threshold, unit in units:
-        if bytes_per_sec >= threshold:
-            return bytes_per_sec / threshold, unit
+        if rows_per_sec >= threshold:
+            return rows_per_sec / threshold, unit
 
-    return bytes_per_sec, "B/s"
+    return rows_per_sec, "rows/s"
 
 
 def select_common_unit(max_speed: float) -> Tuple[float, str]:
@@ -44,22 +44,22 @@ def select_common_unit(max_speed: float) -> Tuple[float, str]:
     Select an appropriate common unit for displaying speeds.
 
     Args:
-        max_speed: Maximum speed in bytes per second
+        max_speed: Maximum speed in rows per second
 
     Returns:
         Tuple of (divisor, unit string)
     """
     # Choose unit based on max speed
-    if max_speed >= 1024**4:
-        return 1024**4, "TiB/s"
-    elif max_speed >= 1024**3:
-        return 1024**3, "GiB/s"
-    elif max_speed >= 1024**2:
-        return 1024**2, "MiB/s"
-    elif max_speed >= 1024:
-        return 1024, "KiB/s"
+    if max_speed >= 1000**4:
+        return 1000**4, "T rows/s"
+    elif max_speed >= 1000**3:
+        return 1000**3, "G rows/s"
+    elif max_speed >= 1000**2:
+        return 1000**2, "M rows/s"
+    elif max_speed >= 1000:
+        return 1000, "K rows/s"
     else:
-        return 1, "B/s"
+        return 1, "rows/s"
 
 
 class GaugeWatcher:
@@ -118,7 +118,7 @@ class GaugeWatcher:
                 if "gauges" in data and "elapsed" in data:
                     elapsed = data["elapsed"]
                     for gauge_name, gauge_stats in data["gauges"].items():
-                        speed = gauge_stats["speed"]  # in bytes/s
+                        speed = gauge_stats["speed"]  # in rows/s
 
                         # Store data
                         gauge_info = self.gauge_data[gauge_name]
@@ -261,7 +261,7 @@ class GaugeWatcher:
         else:
             min_time = max_time = 0
 
-        # Get global max speed for synchronized y-axis (in bytes/s)
+        # Get global max speed for synchronized y-axis (in rows/s)
         global_max_speed = 0.0
         if self.sync_y_axis:
             for gauge_info in self.gauge_data.values():
@@ -274,12 +274,12 @@ class GaugeWatcher:
         if self.sync_y_axis:
             divisor, units = select_common_unit(global_max_speed)
         else:
-            divisor, units = 1, "B/s"  # Will be overridden per gauge
+            divisor, units = 1, "rows/s"  # Will be overridden per gauge
 
         # Render each gauge
         for gauge_name, gauge_info in sorted(self.gauge_data.items()):
             times = gauge_info["times"]
-            speeds = gauge_info["speeds"]  # in bytes/s
+            speeds = gauge_info["speeds"]  # in rows/s
 
             # Determine the max speed for this gauge's plot
             if self.sync_y_axis:
