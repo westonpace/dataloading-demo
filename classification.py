@@ -7,7 +7,8 @@ import argparse
 import numpy as np
 import datasets
 import random
-from datasets import load_dataset, load_metric
+import evaluate
+from datasets import load_dataset
 from transformers import (
     AutoTokenizer,
     AutoModelForSequenceClassification,
@@ -131,7 +132,7 @@ def main():
     # Load dataset and metric
     actual_task = "mnli" if task == "mnli-mm" else task
     dataset = load_dataset("glue", actual_task)
-    metric = load_metric('glue', actual_task)
+    metric = evaluate.load('glue', actual_task)
 
     print(f"Dataset loaded: {dataset}")
     print(f"Metric: {metric}")
